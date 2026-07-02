@@ -1,43 +1,36 @@
 const db = require("../db");
 
-
 exports.listar = async (req, res) => {
+
     try {
 
         const [rows] = await db.query(`
             SELECT
                 id_equipo,
-                responsable,
-                cargo,
                 equipo,
+                marca,
                 modelo,
-                fecha_entrega,
-                accesorio_asignado,
-                fecha_asignacion_accesorio,
-
-                DATEDIFF(CURDATE(), fecha_entrega) AS dias_con_equipo,
-
-                CASE
-                    WHEN fecha_asignacion_accesorio IS NULL THEN 0
-                    ELSE DATEDIFF(CURDATE(), fecha_asignacion_accesorio)
-                END AS dias_con_accesorio
-
+                serial,
+                estado
             FROM equipos
+            ORDER BY equipo ASC
         `);
 
         res.json(rows);
 
     } catch (error) {
 
-        console.error(error);
+    console.error(error);
 
-        res.status(500).json({
-            mensaje: "Error al listar equipos"
-        });
+    res.status(500).json({
+        mensaje: "Error al listar equipos",
+        error: error.message,
+        sqlMessage: error.sqlMessage
+    });
 
-    }
+}
+
 };
-
 
 exports.obtener = async (req, res) => {
 
@@ -70,41 +63,34 @@ exports.obtener = async (req, res) => {
 
 };
 
-
 exports.crear = async (req, res) => {
 
     try {
 
         const {
-            responsable,
-            cargo,
             equipo,
+            marca,
             modelo,
-            fecha_entrega,
-            accesorio_asignado,
-            fecha_asignacion_accesorio
+            serial,
+            estado
         } = req.body;
 
         await db.query(
             `INSERT INTO equipos
             (
-                responsable,
-                cargo,
                 equipo,
+                marca,
                 modelo,
-                fecha_entrega,
-                accesorio_asignado,
-                fecha_asignacion_accesorio
+                serial,
+                estado
             )
-            VALUES (?,?,?,?,?,?,?)`,
+            VALUES (?,?,?,?,?)`,
             [
-                responsable,
-                cargo,
                 equipo,
+                marca,
                 modelo,
-                fecha_entrega,
-                accesorio_asignado,
-                fecha_asignacion_accesorio
+                serial,
+                estado || "DISPONIBLE"
             ]
         );
 
@@ -124,7 +110,6 @@ exports.crear = async (req, res) => {
 
 };
 
-
 exports.actualizar = async (req, res) => {
 
     try {
@@ -132,34 +117,28 @@ exports.actualizar = async (req, res) => {
         const { id } = req.params;
 
         const {
-            responsable,
-            cargo,
             equipo,
+            marca,
             modelo,
-            fecha_entrega,
-            accesorio_asignado,
-            fecha_asignacion_accesorio
+            serial,
+            estado
         } = req.body;
 
         await db.query(
             `UPDATE equipos
             SET
-                responsable=?,
-                cargo=?,
                 equipo=?,
+                marca=?,
                 modelo=?,
-                fecha_entrega=?,
-                accesorio_asignado=?,
-                fecha_asignacion_accesorio=?
+                serial=?,
+                estado=?
             WHERE id_equipo=?`,
             [
-                responsable,
-                cargo,
                 equipo,
+                marca,
                 modelo,
-                fecha_entrega,
-                accesorio_asignado,
-                fecha_asignacion_accesorio,
+                serial,
+                estado,
                 id
             ]
         );
@@ -179,7 +158,6 @@ exports.actualizar = async (req, res) => {
     }
 
 };
-
 
 exports.eliminar = async (req, res) => {
 

@@ -17,6 +17,8 @@ app.use("/api/equipos", require("./routes/equipos"));
 app.use("/api/insumos", require("./routes/insumos"));
 app.use("/api/salidas", require("./routes/salidas"));
 app.use("/api/accesorios", require("./routes/accesorios"));
+app.use("/api/responsables", require("./routes/responsables"));
+app.use("/api/asignaciones", require("./routes/asignaciones")); 
 
 
 app.get("/", (req, res) => {
