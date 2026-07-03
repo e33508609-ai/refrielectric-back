@@ -1,28 +1,23 @@
+// controllers/accesorios.controller.js
 const db = require("../db");
 
+// Listar todos los accesorios
 exports.listar = async (req, res) => {
     try {
         const [rows] = await db.query(`
-            SELECT
-                c.id_cambio,
-                c.id_equipo,
-                e.equipo,
-                e.marca,
-                e.modelo,
-                e.serial,
-                r.nombre AS responsable,
-                c.tipo_accesorio,
-                c.marca AS accesorio_marca,
-                c.accesorio_anterior,
-                c.accesorio_nuevo,
-                c.fecha_cambio,
-                DATEDIFF(CURDATE(), c.fecha_cambio) AS dias_con_accesorio,
-                c.observaciones
-            FROM cambios_accesorios c
-            INNER JOIN equipos e ON c.id_equipo = e.id_equipo
-            LEFT JOIN asignacion_equipos a ON c.id_equipo = a.id_equipo AND a.estado = 'ASIGNADO'
-            LEFT JOIN responsables r ON a.id_responsable = r.id_responsable
-            ORDER BY c.fecha_cambio DESC
+            SELECT 
+                id_accesorio,
+                tipo_accesorio,
+                marca,
+                referencia,
+                serial,
+                estado,
+                observaciones,
+                fecha_creacion,
+                DATE_FORMAT(fecha_creacion, '%Y-%m-%d') as fecha_creacion_formateada,
+                DATEDIFF(CURDATE(), fecha_creacion) AS dias_creado
+            FROM accesorios
+            ORDER BY fecha_creacion DESC
         `);
 
         res.json(rows);
@@ -30,30 +25,35 @@ exports.listar = async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({
-            mensaje: "Error al listar los cambios de accesorios"
+            mensaje: "Error al listar los accesorios"
         });
     }
 };
 
+// Obtener un accesorio por ID
 exports.obtener = async (req, res) => {
     try {
         const { id } = req.params;
 
         const [rows] = await db.query(`
-            SELECT
-                c.*,
-                e.equipo,
-                e.marca AS equipo_marca,
-                e.modelo AS equipo_modelo,
-                DATEDIFF(CURDATE(), c.fecha_cambio) AS dias_con_accesorio
-            FROM cambios_accesorios c
-            INNER JOIN equipos e ON c.id_equipo = e.id_equipo
-            WHERE c.id_cambio = ?
+            SELECT 
+                id_accesorio,
+                tipo_accesorio,
+                marca,
+                referencia,
+                serial,
+                estado,
+                observaciones,
+                fecha_creacion,
+                DATE_FORMAT(fecha_creacion, '%Y-%m-%d') as fecha_creacion_formateada,
+                DATEDIFF(CURDATE(), fecha_creacion) AS dias_creado
+            FROM accesorios
+            WHERE id_accesorio = ?
         `, [id]);
 
         if (rows.length === 0) {
             return res.status(404).json({
-                mensaje: "Cambio no encontrado"
+                mensaje: "Accesorio no encontrado"
             });
         }
 
@@ -62,115 +62,199 @@ exports.obtener = async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({
-            mensaje: "Error al obtener el cambio"
+            mensaje: "Error al obtener el accesorio"
         });
     }
 };
 
+// Crear un nuevo accesorio
 exports.crear = async (req, res) => {
     try {
         const {
-            id_equipo,
             tipo_accesorio,
             marca,
-            accesorio_anterior,
-            accesorio_nuevo,
-            fecha_cambio,
-            observaciones
+            referencia,
+            serial,
+            observaciones,
+            fecha_creacion
         } = req.body;
+
+        // Validación de campos requeridos
+        if (!tipo_accesorio || !marca || !referencia || !fecha_creacion) {
+            return res.status(400).json({
+                mensaje: "Faltan campos requeridos: tipo_accesorio, marca, referencia y fecha_creacion son obligatorios"
+            });
+        }
 
         await db.query('START TRANSACTION');
 
-        await db.query(`
-            INSERT INTO cambios_accesorios
-            (id_equipo, tipo_accesorio, marca, accesorio_anterior, accesorio_nuevo, fecha_cambio, observaciones)
-            VALUES (?,?,?,?,?,?,?)
+        const [result] = await db.query(`
+            INSERT INTO accesorios 
+            (tipo_accesorio, marca, referencia, serial, observaciones, fecha_creacion, estado)
+            VALUES (?, ?, ?, ?, ?, ?, 'DISPONIBLE')
         `, [
-            id_equipo,
             tipo_accesorio,
-            marca || null,
-            accesorio_anterior || null,
-            accesorio_nuevo,
-            fecha_cambio,
-            observaciones || null
+            marca,
+            referencia,
+            serial || null,
+            observaciones || null,
+            fecha_creacion
         ]);
 
         await db.query('COMMIT');
 
         res.status(201).json({
-            mensaje: "Cambio de accesorio registrado correctamente"
+            mensaje: "Accesorio creado correctamente",
+            datos: {
+                id_accesorio: result.insertId,
+                tipo_accesorio,
+                marca,
+                referencia,
+                serial,
+                fecha_creacion
+            }
         });
 
     } catch (error) {
         await db.query('ROLLBACK');
         console.error(error);
         res.status(500).json({
-            mensaje: "Error al registrar el cambio"
+            mensaje: "Error al crear el accesorio"
         });
     }
 };
 
+// Actualizar un accesorio
 exports.actualizar = async (req, res) => {
     try {
         const { id } = req.params;
         const {
             tipo_accesorio,
             marca,
-            accesorio_anterior,
-            accesorio_nuevo,
-            fecha_cambio,
-            observaciones
+            referencia,
+            serial,
+            estado,
+            observaciones,
+            fecha_creacion
         } = req.body;
 
+        // Verificar si el registro existe
+        const [existing] = await db.query(
+            "SELECT id_accesorio FROM accesorios WHERE id_accesorio = ?",
+            [id]
+        );
+
+        if (existing.length === 0) {
+            return res.status(404).json({
+                mensaje: "Accesorio no encontrado"
+            });
+        }
+
         await db.query(`
-            UPDATE cambios_accesorios
+            UPDATE accesorios
             SET
                 tipo_accesorio = ?,
                 marca = ?,
-                accesorio_anterior = ?,
-                accesorio_nuevo = ?,
-                fecha_cambio = ?,
-                observaciones = ?
-            WHERE id_cambio = ?
+                referencia = ?,
+                serial = ?,
+                estado = ?,
+                observaciones = ?,
+                fecha_creacion = ?
+            WHERE id_accesorio = ?
         `, [
             tipo_accesorio,
-            marca || null,
-            accesorio_anterior || null,
-            accesorio_nuevo,
-            fecha_cambio,
+            marca,
+            referencia,
+            serial || null,
+            estado || 'DISPONIBLE',
             observaciones || null,
+            fecha_creacion,
             id
         ]);
 
         res.json({
-            mensaje: "Cambio actualizado correctamente"
+            mensaje: "Accesorio actualizado correctamente",
+            datos: {
+                id_accesorio: id
+            }
         });
 
     } catch (error) {
         console.error(error);
         res.status(500).json({
-            mensaje: "Error al actualizar el cambio"
+            mensaje: "Error al actualizar el accesorio"
         });
     }
 };
 
+// Eliminar un accesorio
 exports.eliminar = async (req, res) => {
     try {
         const { id } = req.params;
 
+        // Verificar si el registro existe
+        const [existing] = await db.query(
+            "SELECT id_accesorio FROM accesorios WHERE id_accesorio = ?",
+            [id]
+        );
+
+        if (existing.length === 0) {
+            return res.status(404).json({
+                mensaje: "Accesorio no encontrado"
+            });
+        }
+
+        // Verificar si está asignado
+        const [asignado] = await db.query(
+            "SELECT id_cambio FROM cambios_accesorios WHERE id_accesorio = ?",
+            [id]
+        );
+
+        if (asignado.length > 0) {
+            return res.status(400).json({
+                mensaje: "No se puede eliminar el accesorio porque está asignado a un equipo"
+            });
+        }
+
         await db.query(
-            "DELETE FROM cambios_accesorios WHERE id_cambio = ?",
+            "DELETE FROM accesorios WHERE id_accesorio = ?",
             [id]
         );
 
         res.json({
-            mensaje: "Cambio eliminado correctamente"
+            mensaje: "Accesorio eliminado correctamente"
         });
 
     } catch (error) {
         console.error(error);
         res.status(500).json({
-            mensaje: "Error al eliminar el cambio"
+            mensaje: "Error al eliminar el accesorio"
+        });
+    }
+};
+
+// Obtener accesorios disponibles (para asignar)
+exports.disponibles = async (req, res) => {
+    try {
+        const [rows] = await db.query(`
+            SELECT 
+                id_accesorio,
+                tipo_accesorio,
+                marca,
+                referencia,
+                serial,
+                fecha_creacion
+            FROM accesorios
+            WHERE estado = 'DISPONIBLE'
+            ORDER BY tipo_accesorio, marca
+        `);
+
+        res.json(rows);
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            mensaje: "Error al obtener accesorios disponibles"
         });
     }
 };
